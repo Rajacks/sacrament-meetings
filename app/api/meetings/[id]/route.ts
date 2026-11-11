@@ -6,18 +6,30 @@ type RouteContext = {
 };
 
 export async function GET(request: Request, context: RouteContext) {
-  const { id } = await context.params;
-  const meetingId = Number(id);
+  try {
+    const { id } = await context.params;
+    const meetingId = Number(id);
 
-  if (!Number.isInteger(meetingId) || meetingId <= 0) {
-    return NextResponse.json({ error: "Invalid meeting ID" }, { status: 400 });
+    if (!Number.isInteger(meetingId) || meetingId <= 0) {
+      return NextResponse.json(
+        { error: "Invalid meeting ID" },
+        { status: 400 },
+      );
+    }
+
+    const meeting = await getMeetingById(meetingId);
+
+    if (!meeting) {
+      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(meeting);
+  } catch (error) {
+    console.error("Error fetching meeting:", error);
+
+    return NextResponse.json(
+      { error: "Failed to fetch meeting" },
+      { status: 500 },
+    );
   }
-
-  const meeting = getMeetingById(meetingId);
-
-  if (!meeting) {
-    return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
-  }
-
-  return NextResponse.json(meeting);
 }

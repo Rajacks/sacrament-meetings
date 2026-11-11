@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import MeetingDetail from "@/components/MeetingDetail";
 import type { SacramentMeeting } from "@/lib/types";
 
+type MeetingsResponse = {
+  meetings: SacramentMeeting[];
+  total: number;
+  page: number;
+  totalPages: number;
+};
+
 export default function CurrentMeetingClient() {
   const [meeting, setMeeting] = useState<SacramentMeeting | null>(null);
   const [loading, setLoading] = useState(true);
@@ -11,13 +18,14 @@ export default function CurrentMeetingClient() {
   useEffect(() => {
     async function fetchCurrentMeeting() {
       try {
-        const response = await fetch("/api/meetings");
+        const response = await fetch("/api/meetings?page=1");
 
         if (!response.ok) {
           throw new Error("Failed to load meetings.");
         }
 
-        const meetings: SacramentMeeting[] = await response.json();
+        const data: MeetingsResponse = await response.json();
+        const meetings = data.meetings;
 
         const today = new Date();
         const sunday = new Date(today);
