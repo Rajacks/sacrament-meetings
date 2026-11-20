@@ -1,11 +1,14 @@
 import Link from "next/link";
 import type { SacramentMeeting } from "@/lib/types";
+import { deleteMeeting } from "@/lib/actions";
 
 type MeetingCardProps = {
   meeting: SacramentMeeting;
 };
 
 export default function MeetingCard({ meeting }: MeetingCardProps) {
+  const deleteMeetingWithId = deleteMeeting.bind(null, meeting.id);
+
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-[#E7E1D6] bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-[#C9B38A] hover:shadow-xl">
       {/* Gold Accent */}
@@ -78,6 +81,26 @@ export default function MeetingCard({ meeting }: MeetingCardProps) {
             →
           </span>
         </Link>
+
+        {/* Edit and Delete Buttons */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Link
+            href={`/meetings/${meeting.id}/edit`}
+            className="flex items-center justify-center rounded-xl border border-[#C9B38A] px-4 py-3 text-sm font-semibold text-[#8A6D3B] transition hover:bg-[#F1EBDD] focus:outline-none focus:ring-2 focus:ring-[#C4A46B] focus:ring-offset-2"
+          >
+            Edit
+          </Link>
+
+          <form action={deleteMeetingWithId}>
+            <button
+              type="submit"
+              className="w-full rounded-xl border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 transition hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+              aria-label={`Delete meeting on ${meeting.date}`}
+            >
+              Delete
+            </button>
+          </form>
+        </div>
       </div>
     </article>
   );

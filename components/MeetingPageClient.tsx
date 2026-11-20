@@ -66,7 +66,7 @@ export default function MeetingPageClient({ id }: MeetingPageClientProps) {
               href="/meetings"
               className="font-semibold text-blue-900 hover:underline"
             >
-              ← Back to Meetings
+              Back to Meetings
             </Link>
           </div>
         </>

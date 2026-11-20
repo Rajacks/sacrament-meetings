@@ -169,3 +169,200 @@ export async function getMeetingById(
 
   return buildMeeting(result.rows[0]);
 }
+
+// Input type for creating or updating a meeting
+export type MeetingInput = Omit<SacramentMeeting, "id">;
+
+// Create a new meeting and its related records
+export async function createMeeting(meeting: MeetingInput): Promise<number> {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const meetingResult = await client.query(
+      `INSERT INTO meetings (
+        date,
+        meeting_type,
+        presiding,
+        conducting,
+        opening_hymn_number,
+        opening_hymn_title,
+        opening_prayer,
+        sacrament_hymn_number,
+        sacrament_hymn_title,
+        closing_hymn_number,
+        closing_hymn_title,
+        closing_prayer,
+        stake_business
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13
+      )
+      RETURNING id`,
+      [
+        meeting.date,
+        meeting.meetingType,
+        meeting.presiding,
+        meeting.conducting,
+        meeting.openingHymn.number,
+        meeting.openingHymn.title,
+        meeting.openingPrayer,
+        meeting.sacramentHymn.number,
+        meeting.sacramentHymn.title,
+        meeting.closingHymn.number,
+        meeting.closingHymn.title,
+        meeting.closingPrayer,
+        meeting.stakeBusiness,
+      ],
+    );
+
+    const meetingId: number = meetingResult.rows[0].id;
+
+    // Insert announcements
+    for (const announcement of meeting.announcements ?? []) {
+      await client.query(
+        `INSERT INTO announcements (meeting_id, description)
+         VALUES ($1, $2)`,
+        [meetingId, announcement],
+      );
+    }
+
+    // Insert ward business
+    for (const item of meeting.wardBusiness) {
+      await client.query(
+        `INSERT INTO ward_business (meeting_id, description)
+         VALUES ($1, $2)`,
+        [meetingId, item.description],
+      );
+    }
+
+    // Insert speakers and musical numbers
+    for (const speaker of meeting.speakers) {
+      await client.query(
+        `INSERT INTO speakers (meeting_id, name, topic, type)
+         VALUES ($1, $2, $3, $4)`,
+        [meetingId, speaker.name, speaker.topic, speaker.type],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return meetingId;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Update an existing meeting and replace its related records
+export async function updateMeeting(
+  id: number,
+  meeting: MeetingInput,
+): Promise<boolean> {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const meetingResult = await client.query(
+      `UPDATE meetings
+       SET
+         date = $1,
+         meeting_type = $2,
+         presiding = $3,
+         conducting = $4,
+         opening_hymn_number = $5,
+         opening_hymn_title = $6,
+         opening_prayer = $7,
+         sacrament_hymn_number = $8,
+         sacrament_hymn_title = $9,
+         closing_hymn_number = $10,
+         closing_hymn_title = $11,
+         closing_prayer = $12,
+         stake_business = $13
+       WHERE id = $14
+       RETURNING id`,
+      [
+        meeting.date,
+        meeting.meetingType,
+        meeting.presiding,
+        meeting.conducting,
+        meeting.openingHymn.number,
+        meeting.openingHymn.title,
+        meeting.openingPrayer,
+        meeting.sacramentHymn.number,
+        meeting.sacramentHymn.title,
+        meeting.closingHymn.number,
+        meeting.closingHymn.title,
+        meeting.closingPrayer,
+        meeting.stakeBusiness,
+        id,
+      ],
+    );
+
+    // Stop if the meeting does not exist
+    if (meetingResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+
+    // Remove old related records
+    await client.query("DELETE FROM announcements WHERE meeting_id = $1", [id]);
+
+    await client.query("DELETE FROM ward_business WHERE meeting_id = $1", [id]);
+
+    await client.query("DELETE FROM speakers WHERE meeting_id = $1", [id]);
+
+    // Insert updated announcements
+    for (const announcement of meeting.announcements ?? []) {
+      await client.query(
+        `INSERT INTO announcements (meeting_id, description)
+         VALUES ($1, $2)`,
+        [id, announcement],
+      );
+    }
+
+    // Insert updated ward business
+    for (const item of meeting.wardBusiness) {
+      await client.query(
+        `INSERT INTO ward_business (meeting_id, description)
+         VALUES ($1, $2)`,
+        [id, item.description],
+      );
+    }
+
+    // Insert updated speakers and musical numbers
+    for (const speaker of meeting.speakers) {
+      await client.query(
+        `INSERT INTO speakers (meeting_id, name, topic, type)
+         VALUES ($1, $2, $3, $4)`,
+        [id, speaker.name, speaker.topic, speaker.type],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Delete a meeting
+export async function deleteMeeting(id: number): Promise<boolean> {
+  const result = await pool.query(
+    `DELETE FROM meetings
+     WHERE id = $1
+     RETURNING id`,
+    [id],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}
