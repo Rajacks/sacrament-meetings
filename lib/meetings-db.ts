@@ -1,127 +1,171 @@
-import type { SacramentMeeting } from "./types";
+import pool from "./db";
+import type { MeetingType, SacramentMeeting } from "./types";
 
-const meetings: SacramentMeeting[] = [
-  {
-    id: 1,
-    date: "2026-05-03",
-    meetingType: "regular",
-    presiding: "Bishop John Smith",
-    conducting: "Brother Mark Johnson",
-    announcements: ["Ward activity next Saturday."],
-    openingHymn: { number: 2, title: "The Spirit of God" },
-    openingPrayer: "Brother David Brown",
-    wardBusiness: [{ description: "Sustain new ward officers." }],
-    stakeBusiness: false,
-    sacramentHymn: { number: 169, title: "As Now We Take the Sacrament" },
-    speakers: [
-      {
-        name: "Sister Mary Jones",
-        topic: "Faith in Jesus Christ",
-        type: "speaker",
-      },
-      {
-        name: "Brother Peter Lee",
-        topic: "Following the Savior",
-        type: "speaker",
-      },
-    ],
-    closingHymn: { number: 134, title: "I Believe in Christ" },
-    closingPrayer: "Sister Anna White",
-  },
-  {
-    id: 2,
-    date: "2026-05-10",
-    meetingType: "regular",
-    presiding: "Bishop John Smith",
-    conducting: "Brother Mark Johnson",
-    announcements: ["Mother’s Day celebration."],
-    openingHymn: { number: 19, title: "We Thank Thee, O God, for a Prophet" },
-    openingPrayer: "Brother James Clark",
-    wardBusiness: [],
-    stakeBusiness: false,
-    sacramentHymn: { number: 181, title: "Jesus of Nazareth, Savior and King" },
-    speakers: [
-      {
-        name: "Sister Rachel Green",
-        topic: "The Love of a Mother",
-        type: "speaker",
-      },
-    ],
-    closingHymn: { number: 308, title: "Love One Another" },
-    closingPrayer: "Brother Thomas Hall",
-  },
-  {
-    id: 3,
-    date: "2026-05-17",
-    meetingType: "testimony",
-    presiding: "Bishop John Smith",
-    conducting: "Brother Mark Johnson",
-    openingHymn: { number: 89, title: "The Lord Is My Light" },
-    openingPrayer: "Sister Emily Davis",
-    wardBusiness: [],
-    stakeBusiness: false,
-    sacramentHymn: { number: 193, title: "I Stand All Amazed" },
-    speakers: [{ name: "Ward Members", topic: "Testimonies", type: "speaker" }],
-    closingHymn: { number: 100, title: "Nearer, My God, to Thee" },
-    closingPrayer: "Brother Michael Scott",
-  },
-  {
-    id: 4,
-    date: "2026-05-24",
-    meetingType: "stake",
-    presiding: "Stake President Robert King",
-    conducting: "Brother Mark Johnson",
-    openingHymn: { number: 27, title: "Praise to the Lord, the Almighty" },
-    openingPrayer: "Brother Daniel Young",
-    wardBusiness: [],
-    stakeBusiness: true,
-    sacramentHymn: { number: 185, title: "Reverently and Meekly" },
-    speakers: [
-      {
-        name: "President Robert King",
-        topic: "Building Zion",
-        type: "speaker",
-      },
-    ],
-    closingHymn: { number: 97, title: "Lead, Kindly Light" },
-    closingPrayer: "Sister Olivia Moore",
-  },
-  {
-    id: 5,
-    date: "2026-05-31",
-    meetingType: "regular",
-    presiding: "Bishop John Smith",
-    conducting: "Brother Mark Johnson",
-    openingHymn: { number: 30, title: "Come, Come, Ye Saints" },
-    openingPrayer: "Brother William Adams",
-    wardBusiness: [],
-    stakeBusiness: false,
-    sacramentHymn: { number: 188, title: "Thy Will, O Lord, Be Done" },
-    speakers: [
-      {
-        name: "Sister Grace Wilson",
-        topic: "Trusting in the Lord",
-        type: "speaker",
-      },
-      {
-        name: "Brother Samuel Reed",
-        topic: "Service and Discipleship",
-        type: "speaker",
-      },
-    ],
-    closingHymn: { number: 85, title: "How Firm a Foundation" },
-    closingPrayer: "Sister Hannah Lewis",
-  },
-];
-
-export function getMeetings(date?: string | null): SacramentMeeting[] {
-  if (!date) {
-    return meetings;
-  }
-
-  return meetings.filter((meeting) => meeting.date === date);
+interface MeetingRow {
+  id: number;
+  date: string;
+  meeting_type: MeetingType;
+  presiding: string;
+  conducting: string;
+  opening_hymn_number: number;
+  opening_hymn_title: string;
+  opening_prayer: string;
+  sacrament_hymn_number: number;
+  sacrament_hymn_title: string;
+  closing_hymn_number: number;
+  closing_hymn_title: string;
+  closing_prayer: string;
+  stake_business: boolean;
 }
 
-export function getMeetingById(id: number): SacramentMeeting | null {
-  return meetings.find((meeting) => meeting.id === id) ?? null;
+const meetingColumns = `
+  id,
+  TO_CHAR(date, 'YYYY-MM-DD') AS date,
+  meeting_type,
+  presiding,
+  conducting,
+  opening_hymn_number,
+  opening_hymn_title,
+  opening_prayer,
+  sacrament_hymn_number,
+  sacrament_hymn_title,
+  closing_hymn_number,
+  closing_hymn_title,
+  closing_prayer,
+  stake_business
+`;
+
+async function buildMeeting(row: MeetingRow): Promise<SacramentMeeting> {
+  const meetingId: number = row.id;
+
+  const [announcementsResult, businessResult, speakersResult] =
+    await Promise.all([
+      pool.query(
+        "SELECT description FROM announcements WHERE meeting_id = $1",
+        [meetingId],
+      ),
+      pool.query(
+        "SELECT description FROM ward_business WHERE meeting_id = $1",
+        [meetingId],
+      ),
+      pool.query(
+        "SELECT name, topic, type FROM speakers WHERE meeting_id = $1",
+        [meetingId],
+      ),
+    ]);
+
+  return {
+    id: meetingId,
+    date: row.date,
+    meetingType: row.meeting_type,
+    presiding: row.presiding,
+    conducting: row.conducting,
+    announcements: announcementsResult.rows.map((item) => item.description),
+    openingHymn: {
+      number: row.opening_hymn_number,
+      title: row.opening_hymn_title,
+    },
+    openingPrayer: row.opening_prayer,
+    wardBusiness: businessResult.rows.map((item) => ({
+      description: item.description,
+    })),
+    stakeBusiness: row.stake_business,
+    sacramentHymn: {
+      number: row.sacrament_hymn_number,
+      title: row.sacrament_hymn_title,
+    },
+    speakers: speakersResult.rows.map((speaker) => ({
+      name: speaker.name,
+      topic: speaker.topic,
+      type: speaker.type,
+    })),
+    closingHymn: {
+      number: row.closing_hymn_number,
+      title: row.closing_hymn_title,
+    },
+    closingPrayer: row.closing_prayer,
+  };
+}
+
+// Get all meetings, optionally filtered by date
+export async function getMeetings(
+  date?: string | null,
+): Promise<SacramentMeeting[]> {
+  const result = await pool.query(
+    `SELECT ${meetingColumns}
+     FROM meetings
+     WHERE ($1::date IS NULL OR date = $1::date)
+     ORDER BY date`,
+    [date ?? null],
+  );
+
+  return Promise.all(result.rows.map(buildMeeting));
+}
+
+// Search and paginate meetings
+export async function getMeetingsPaginated(query = "", page = 1, limit = 5) {
+  const search = query.trim();
+  const offset = (page - 1) * limit;
+
+  const searchCondition = `
+    (
+      meeting_type ILIKE $1
+      OR presiding ILIKE $1
+      OR conducting ILIKE $1
+      OR EXISTS (
+        SELECT 1
+        FROM speakers
+        WHERE speakers.meeting_id = meetings.id
+        AND speakers.name ILIKE $1
+      )
+    )
+  `;
+
+  const searchValue = `%${search}%`;
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*) AS total
+     FROM meetings
+     WHERE ($2 = '' OR ${searchCondition})`,
+    [searchValue, search],
+  );
+
+  const total = Number(countResult.rows[0].total);
+  const totalPages = Math.ceil(total / limit);
+
+  const meetingsResult = await pool.query(
+    `SELECT ${meetingColumns}
+     FROM meetings
+     WHERE ($2 = '' OR ${searchCondition})
+     ORDER BY date
+     LIMIT $3 OFFSET $4`,
+    [searchValue, search, limit, offset],
+  );
+
+  const meetings = await Promise.all(meetingsResult.rows.map(buildMeeting));
+
+  return {
+    meetings,
+    total,
+    page,
+    totalPages,
+  };
+}
+
+// Get one meeting by ID
+export async function getMeetingById(
+  id: number,
+): Promise<SacramentMeeting | null> {
+  const result = await pool.query(
+    `SELECT ${meetingColumns}
+     FROM meetings
+     WHERE id = $1`,
+    [id],
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return buildMeeting(result.rows[0]);
 }
